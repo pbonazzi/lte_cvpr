@@ -1,0 +1,22 @@
+name: difflogic
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1 
+  - numpy
+  - scikit-learn
+  - matplotlib
+  - tqdm
+  - ninja
+  - python-dotenv
+  - pip
+  - pip:
+    - wandb
+    - tonic
