@@ -23,10 +23,10 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from data.datasets.cifar10_dvs import (
+    CIFAR10_DVS_SENSOR_SIZE,
     CIFAR10DVS,
     load_cifar10_dvs_metadata,
 )
-from data.transforms import Denoise
 
 
 def create_cache_directory(data_path: Path | str) -> Path:
@@ -65,7 +65,11 @@ def preprocess_cifar10_dvs(
         representation="spike_tensor",
         target_size=(128, 128),  # Keep original size before resize
         num_time_bins=num_time_bins,
-        event_filter=Denoise(filter_time=denoise_filter_time_us),
+        # Must be passed as denoise_filter_time_us, not as event_filter: the
+        # cache filename tag is built from this field, so supplying the denoiser
+        # only via event_filter tags the files "denoisenone" and a trainer run
+        # with --denoise_filter_time_us never finds them.
+        denoise_filter_time_us=denoise_filter_time_us,
         event_transform=None,
         binning_strategy=binning_strategy,
     )
@@ -94,9 +98,15 @@ def preprocess_cifar10_dvs(
         
         # Generate and cache
         try:
-            spike_tensor = temp_dataset._events_to_spike_tensor(
-                temp_dataset._read_events(file_path)
-            )
+            # Mirror CIFAR10DVS.__getitem__'s cache-miss path exactly, denoiser
+            # included: generating straight from _read_events skipped it and
+            # cached tensors that no trainer setting can reproduce.
+            events = temp_dataset._read_events(file_path)
+            if temp_dataset.denoiser is not None:
+                events = temp_dataset.denoiser(
+                    events, sensor_size=CIFAR10_DVS_SENSOR_SIZE
+                )
+            spike_tensor = temp_dataset._events_to_spike_tensor(events)
             
             torch.save(spike_tensor, str(cache_path))
             regenerated_count += 1
