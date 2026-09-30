@@ -13,12 +13,14 @@ class ConvLogicBlock(nn.Module):
                  dim_in: int,
                  dim_out: int,
                  tau_noise: float = 1.0,
-                 event_mode: bool = False
+                 event_mode: bool = False,
+                 weights_init_mode: str = 'residual',
                  ) -> None:
         super().__init__()
 
         self.net = nn.Sequential(
-            ConvLogicLayer(dim_in, dim_out, tau_noise=tau_noise, event_mode=event_mode),
+            ConvLogicLayer(dim_in, dim_out, tau_noise=tau_noise, event_mode=event_mode,
+                           weights_init_mode=weights_init_mode),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
@@ -41,12 +43,14 @@ class LogicTreeNet(nn.Module):
                  event_mode: bool = True,
                  grouping_mode: str = "balanced",
                  group_sum_device: Optional[str] = None,
+                 weights_init_mode: str = 'residual',
                  ) -> None:
 
         super().__init__()
 
         assert model_scale in ['s', 'm', 'b', 'l', 'g']
         assert grouping_mode in {"balanced", "legacy_padded"}, grouping_mode
+        assert weights_init_mode in {"residual", "gaussian"}, weights_init_mode
         scale = {'s':32, 'm':256, 'b':512, 'l':1024, 'g':2560}
         k = scale[model_scale]
 
@@ -63,14 +67,14 @@ class LogicTreeNet(nn.Module):
 
         # Only first layer uses event_mode (for 2-channel event data)
         self.net = nn.Sequential(
-            ConvLogicBlock(in_ch, k, tau_noise, event_mode=event_mode),
-            ConvLogicBlock(k, 4*k, tau_noise),
-            ConvLogicBlock(4*k, 16*k, tau_noise),
-            ConvLogicBlock(16*k, 32*k, tau_noise),
+            ConvLogicBlock(in_ch, k, tau_noise, event_mode=event_mode, weights_init_mode=weights_init_mode),
+            ConvLogicBlock(k, 4*k, tau_noise, weights_init_mode=weights_init_mode),
+            ConvLogicBlock(4*k, 16*k, tau_noise, weights_init_mode=weights_init_mode),
+            ConvLogicBlock(16*k, 32*k, tau_noise, weights_init_mode=weights_init_mode),
             nn.Flatten(start_dim=1),
-            LogicLayer(flattened_dim, 1280*k, tau_noise=tau_noise),
-            LogicLayer(1280*k, 640*k, tau_noise=tau_noise),
-            LogicLayer(640*k, 320*k, tau_noise=tau_noise),
+            LogicLayer(flattened_dim, 1280*k, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            LogicLayer(1280*k, 640*k, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            LogicLayer(640*k, 320*k, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
         )
 
         self.grouping_mode = grouping_mode

@@ -205,6 +205,13 @@ def main():
         default=0.0,
         help="Minimum learning rate for cosine scheduler",
     )
+    parser.add_argument(
+        "--weights_init_mode",
+        type=str,
+        default="residual",
+        choices=["residual", "gaussian"],
+        help="Gate weight initialization for every logic layer.",
+    )
     parser.add_argument("--num_time_bins", type=int, default=5, help="Number of temporal bins for the spike tensor")
     parser.add_argument(
         "--binning_strategy",
@@ -281,6 +288,7 @@ def main():
         flip_lr_p=args.flip_lr_p,
         denoise_filter_time_us=args.denoise_filter_time_us,
         num_workers=DEFAULT_NUM_WORKERS,
+        weights_init_mode=args.weights_init_mode,
     )
     
     config = {**base_config, **model_config}
@@ -311,6 +319,7 @@ def main():
             tau_noise=config.tau_noise,
             learn_tau_gs=config.lr_tau_gs == 0,
             input_size=config.target_size,
+            weights_init_mode=config.weights_init_mode,
         )
         criterion = nn.CrossEntropyLoss()
         download_cifar10_dvs(DATA_PATH)
