@@ -12,7 +12,9 @@ from torchvision.transforms import InterpolationMode, Resize
 from data.transforms.event_augmentations import from_tonic_structured
 
 CIFAR10_DVS_DIRNAME = "CIFAR10-DVS"
-CIFAR10_DVS_DOWNLOAD_URL = "https://figshare.com/ndownloader/files/38023437"
+# Use the ndownloader host directly: https://figshare.com/ndownloader/files/<id>
+# now answers HTTP 202 with an empty body indefinitely instead of redirecting.
+CIFAR10_DVS_DOWNLOAD_URL = "https://ndownloader.figshare.com/files/38023437"
 CIFAR10_DVS_ARCHIVE_NAME = "CIFAR10DVS.zip"
 CIFAR10_DVS_ARCHIVE_MD5 = "ce3a4a0682dc0943703bd8f749a7701c"
 CIFAR10_DVS_CLASS_ARCHIVES = [
