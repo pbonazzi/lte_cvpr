@@ -42,7 +42,12 @@ class LogicLayer(torch.nn.Module):
         # Connections
         self.connections = connections
         assert self.connections in ["random", "unique"], self.connections
-        self.indices = self.get_connections(self.connections, device)
+        # Registered as buffers so the wiring travels inside state_dict(). As plain
+        # attributes they were absent from every checkpoint, and reloading drew a
+        # fresh random wiring for the learned weights -> chance-level accuracy.
+        indices_0, indices_1 = self.get_connections(self.connections, device)
+        self.register_buffer("indices_0", indices_0.long())
+        self.register_buffer("indices_1", indices_1.long())
 
         # Weights
         self.weights_init_mode = weights_init_mode
@@ -50,25 +55,56 @@ class LogicLayer(torch.nn.Module):
         self.weights = self.initialize_weights(out_dim, weights_init_mode)
 
         if self.implementation == "cuda":
-            given_x_indices_of_y = [[] for _ in range(in_dim)]
-            indices_0_np = self.indices[0].cpu().numpy()
-            indices_1_np = self.indices[1].cpu().numpy()
-            for y in range(out_dim):
-                given_x_indices_of_y[indices_0_np[y]].append(y)
-                given_x_indices_of_y[indices_1_np[y]].append(y)
-            self.given_x_indices_of_y_start = torch.tensor(
-                np.array([0] + [len(g) for g in given_x_indices_of_y]).cumsum(),
-                device=device,
-                dtype=torch.int64,
-            )
-            self.given_x_indices_of_y = torch.tensor(
-                [item for sublist in given_x_indices_of_y for item in sublist],
-                dtype=torch.int64,
-                device=device,
-            )
+            self._build_reverse_adjacency()
 
         self.num_neurons = out_dim
         self.num_weights = out_dim
+
+    @property
+    def indices(self):
+        """The (a, b) input wiring of every gate, kept for call-site compatibility."""
+        return self.indices_0, self.indices_1
+
+    def _load_from_state_dict(self, *args, **kwargs):
+        super()._load_from_state_dict(*args, **kwargs)
+        # An override rather than a registered hook: a hook held as a lambda
+        # makes the whole module unpicklable, so torch.save(model) would fail.
+        if self.implementation == "cuda":
+            self._build_reverse_adjacency()
+
+    def _build_reverse_adjacency(self):
+        """Derive the x -> y adjacency the CUDA backward kernel needs from the wiring.
+
+        Rebuilt on every load (see _load_from_state_dict): it is a pure function of
+        indices_0/indices_1, so loading a checkpoint whose wiring differs from
+        the one drawn at construction must invalidate it. Left out of
+        state_dict() (persistent=False) since it is derived, but registered as
+        buffers so it follows .to(device) instead of being stranded on the
+        construction device.
+        """
+        given_x_indices_of_y = [[] for _ in range(self.in_dim)]
+        indices_0_np = self.indices_0.cpu().numpy()
+        indices_1_np = self.indices_1.cpu().numpy()
+        for y in range(self.out_dim):
+            given_x_indices_of_y[indices_0_np[y]].append(y)
+            given_x_indices_of_y[indices_1_np[y]].append(y)
+        device = self.indices_0.device
+        start = torch.tensor(
+            np.array([0] + [len(g) for g in given_x_indices_of_y]).cumsum(),
+            device=device,
+            dtype=torch.int64,
+        )
+        flat = torch.tensor(
+            [item for sublist in given_x_indices_of_y for item in sublist],
+            dtype=torch.int64,
+            device=device,
+        )
+        for name, tensor in (("given_x_indices_of_y_start", start),
+                             ("given_x_indices_of_y", flat)):
+            if name in self._buffers:
+                self._buffers[name] = tensor
+            else:
+                self.register_buffer(name, tensor, persistent=False)
 
     def forward(self, x):
         if isinstance(x, PackBitsTensor):
@@ -90,10 +126,7 @@ class LogicLayer(torch.nn.Module):
     def forward_python(self, x):
         assert x.shape[-1] == self.in_dim, (x.shape[-1], self.in_dim)
 
-        if self.indices[0].dtype != torch.int64 or self.indices[1].dtype != torch.int64:
-            self.indices = self.indices[0].long(), self.indices[1].long()
-
-        a, b = x[..., self.indices[0]], x[..., self.indices[1]]
+        a, b = x[..., self.indices_0], x[..., self.indices_1]
 
         if self.training:
             if self.use_gumbel:
