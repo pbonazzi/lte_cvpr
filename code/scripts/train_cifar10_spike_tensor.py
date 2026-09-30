@@ -436,7 +436,7 @@ def main():
         
         # Delete cache if requested
         if args.delete_cache_after_training and args.use_cache:
-            cache_dir = Path(DATA_PATH).parent / "CIFAR10-DVS-cache"
+            cache_dir = Path(DATA_PATH) / "CIFAR10-DVS-cache"
             if cache_dir.exists():
                 import shutil
                 shutil.rmtree(cache_dir)

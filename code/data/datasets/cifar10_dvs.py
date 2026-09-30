@@ -223,7 +223,9 @@ class CIFAR10DVS(Dataset):
         # Cache settings
         self.use_cache = use_cache and representation == "spike_tensor"
         self.denoise_filter_time_us = denoise_filter_time_us
-        self.cache_dir = Path(data_path).parent / "CIFAR10-DVS-cache" if self.use_cache else None
+        # Sibling of the CIFAR10-DVS dataset folder, matching where
+        # cifar10_dvs_preprocess.create_cache_directory() writes the cache.
+        self.cache_dir = Path(data_path) / "CIFAR10-DVS-cache" if self.use_cache else None
         self.cache_config_tag = self._build_cache_config_tag()
         # This is the empirically better CIFAR10-DVS orientation for both
         # visualization and model training.
