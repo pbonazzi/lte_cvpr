@@ -72,6 +72,19 @@ class LogicLayer(torch.nn.Module):
         if self.implementation == "cuda":
             self._build_reverse_adjacency()
 
+    def __setstate__(self, state):
+        # Whole-model pickles written before the wiring became buffers carry it
+        # as a plain `indices` tuple, which the property above would shadow.
+        legacy = state.pop("indices", None)
+        super().__setstate__(state)
+        if legacy is not None:
+            self.register_buffer("indices_0", legacy[0].long())
+            self.register_buffer("indices_1", legacy[1].long())
+            if self.implementation == "cuda":
+                for name in ("given_x_indices_of_y_start", "given_x_indices_of_y"):
+                    self.__dict__.pop(name, None)
+                self._build_reverse_adjacency()
+
     def _build_reverse_adjacency(self):
         """Derive the x -> y adjacency the CUDA backward kernel needs from the wiring.
 
