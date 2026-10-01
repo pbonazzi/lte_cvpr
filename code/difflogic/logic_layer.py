@@ -218,6 +218,8 @@ class GroupSum(torch.nn.Module):
         :param device:
         """
         super().__init__()
+        if not 0 < tau < float("inf"):
+            raise ValueError(f"GroupSum tau must be a positive finite number, got {tau}")
         self.k = k
         self.device = device
         
