@@ -442,14 +442,6 @@ def main():
                             "val acc":f"{val_metrics['accuracy']:.3f}", })
         
         print("training finished")
-        
-        # Delete cache if requested
-        if args.delete_cache_after_training and args.use_cache:
-            cache_dir = Path(DATA_PATH) / "CIFAR10-DVS-cache"
-            if cache_dir.exists():
-                import shutil
-                shutil.rmtree(cache_dir)
-                print(f"Cache directory deleted: {cache_dir}")
 
         model.load_state_dict(best_state_dict)
         print("restored best weights from epoch {}".format(best_epoch+1))
@@ -483,6 +475,15 @@ def main():
 
         label, path_saved = save_model(model, ckpt_path)
         print("model saved to {}".format(path_saved))
+
+        # Delete cache if requested - only now, after the test evaluation above,
+        # which reads through the same cached datasets and would rewrite it.
+        if args.delete_cache_after_training and args.use_cache:
+            cache_dir = Path(DATA_PATH) / "CIFAR10-DVS-cache"
+            if cache_dir.exists():
+                import shutil
+                shutil.rmtree(cache_dir)
+                print(f"Cache directory deleted: {cache_dir}")
 
         model_artifact = wandb.Artifact(label, type="model", metadata=dict(config))
         model_artifact.add_file(path_saved)
