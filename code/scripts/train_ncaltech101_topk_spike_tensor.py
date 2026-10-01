@@ -145,6 +145,8 @@ def build_parser(default_binning_strategy="duration"):
         dest="use_class_weights",
         default=True,
     )
+    parser.add_argument("--tau_gs", type=float, default=20.0,
+                        help="GroupSum temperature: each class score is divided by it.")
     return parser
 
 
@@ -187,7 +189,7 @@ def build_run_config(args):
         "use_denoise": args.use_denoise,
         "denoise_filter_time_us": args.denoise_filter_time_us,
         "use_cache": args.use_cache,
-        "tau_gs": 20,
+        "tau_gs": args.tau_gs,
         "lr_tau_gs": 0,
         "tau_noise": 0,
         "lr_model": 0.02,

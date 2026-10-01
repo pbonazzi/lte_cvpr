@@ -239,6 +239,8 @@ def main():
         action="store_true",
         help="Delete cache directory after training completes",
     )
+    parser.add_argument("--tau_gs", type=float, default=20.0,
+                        help="GroupSum temperature: each class score is divided by it.")
     args = parser.parse_args()
 
     load_dotenv()
@@ -255,7 +257,7 @@ def main():
 
     model_config = dict(
         # group sum 
-        tau_gs = 20,
+        tau_gs = args.tau_gs,
         lr_tau_gs = 0,
         
         # gumble noise
