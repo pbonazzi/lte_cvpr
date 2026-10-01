@@ -463,8 +463,10 @@ class CIFAR10DVS(Dataset):
             # No cache: standard on-the-fly processing
             events = self._read_events(file_path)
             
-            if self.event_filter is not None:
-                events = self.event_filter(events, sensor_size=CIFAR10_DVS_SENSOR_SIZE)
+            # Same filter as the cache-miss path above, so a sample is denoised
+            # identically whether or not the cache is in use.
+            if self.denoiser is not None:
+                events = self.denoiser(events, sensor_size=CIFAR10_DVS_SENSOR_SIZE)
             if self.event_transform is not None and self.tensor_transform is None:
                 events = self.event_transform(events)
 
