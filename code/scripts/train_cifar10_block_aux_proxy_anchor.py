@@ -565,7 +565,7 @@ def main():
     config = build_run_config(args)
     generator = seed_everything(SEED)
 
-    with wandb.init(project="CIFAR-10-DVS", config=config, mode=args.wandb_mode, name=args.run_name) as run:
+    with wandb.init(project=os.getenv("WANDB_PROJECT", "CIFAR-10-DVS"), config=config, mode=args.wandb_mode, name=args.run_name) as run:
         config = wandb.config
 
         ckpt_path, config_path, _ = create_output_dirs(os.path.join(output_path, run.name))

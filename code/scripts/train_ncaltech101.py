@@ -132,7 +132,7 @@ def main():
     torch.backends.cudnn.deterministic = True
     # --------------------------------------
 
-    with wandb.init(project="LGN_Events", config=config, mode="online", name=args.run_name) as run:
+    with wandb.init(project=os.getenv("WANDB_PROJECT", "LGN_Events"), config=config, mode="online", name=args.run_name) as run:
         # access all HPs through wandb.config, so logging matches execution
         config = wandb.config
 

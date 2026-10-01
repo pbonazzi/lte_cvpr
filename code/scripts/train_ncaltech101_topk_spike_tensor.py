@@ -562,7 +562,7 @@ def main(default_binning_strategy="duration"):
     run_config = build_run_config(args)
     generator = seed_everything(SEED)
 
-    with wandb.init(project=PROJECT_NAME, config=run_config, mode=args.wandb_mode, name=args.run_name) as run:
+    with wandb.init(project=os.getenv("WANDB_PROJECT", PROJECT_NAME), config=run_config, mode=args.wandb_mode, name=args.run_name) as run:
         config = wandb.config
 
         ckpt_path, config_path, _log_path = create_output_dirs(os.path.join(output_path, run.name))

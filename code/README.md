@@ -149,9 +149,11 @@ Environment variables, read from `.env`:
 - `DATA_PATH` — dataset directory (code fallback `./data`)
 - `OUTPUT_PATH` — checkpoint and config output directory (code fallback `./outputs`)
 - `WANDB_API_KEY` — optional, Weights & Biases API key
+- `WANDB_PROJECT` — optional, W&B project; each script falls back to its own
+  default project
 
-The W&B project name is set in the training scripts, not by an environment
-variable.
+Run name, group and tags can be set through wandb's own `WANDB_NAME`,
+`WANDB_RUN_GROUP` and `WANDB_TAGS` variables.
 
 ## Project structure
 
