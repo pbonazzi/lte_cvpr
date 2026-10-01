@@ -755,7 +755,7 @@ def main():
         print(f"model saved to {path_saved}")
 
         if args.delete_cache_after_training and args.use_cache:
-            cache_dir = Path(data_path).parent / "CIFAR10-DVS-cache"
+            cache_dir = Path(data_path) / "CIFAR10-DVS-cache"
             if cache_dir.exists():
                 shutil.rmtree(cache_dir)
                 print(f"Cache directory deleted: {cache_dir}")

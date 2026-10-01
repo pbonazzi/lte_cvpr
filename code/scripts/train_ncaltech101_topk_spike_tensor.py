@@ -54,6 +54,13 @@ def build_parser(default_binning_strategy="duration"):
         help="Number of temporal bins used to build the spike tensor.",
     )
     parser.add_argument(
+        "--weights_init_mode",
+        type=str,
+        default="residual",
+        choices=["residual", "gaussian"],
+        help="Gate weight initialization for every logic layer.",
+    )
+    parser.add_argument(
         "--top_k_classes",
         type=int,
         default=6,
@@ -171,6 +178,7 @@ def build_run_config(args):
         "sample_log_interval": 1,
         "sample_log_strategy": "stratified",
         "grouping_mode": args.grouping_mode,
+        "weights_init_mode": args.weights_init_mode,
         "representation": "spike_tensor",
         "num_time_bins": args.num_time_bins,
         "binning_strategy": args.binning_strategy,
@@ -217,6 +225,7 @@ def build_model(config):
         learn_tau_gs=config.lr_tau_gs == 0,
         input_size=config.target_size,
         grouping_mode=config.grouping_mode,
+        weights_init_mode=config.weights_init_mode,
     )
 
 

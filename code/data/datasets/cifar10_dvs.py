@@ -12,7 +12,9 @@ from torchvision.transforms import InterpolationMode, Resize
 from data.transforms.event_augmentations import from_tonic_structured
 
 CIFAR10_DVS_DIRNAME = "CIFAR10-DVS"
-CIFAR10_DVS_DOWNLOAD_URL = "https://figshare.com/ndownloader/files/38023437"
+# Use the ndownloader host directly: https://figshare.com/ndownloader/files/<id>
+# now answers HTTP 202 with an empty body indefinitely instead of redirecting.
+CIFAR10_DVS_DOWNLOAD_URL = "https://ndownloader.figshare.com/files/38023437"
 CIFAR10_DVS_ARCHIVE_NAME = "CIFAR10DVS.zip"
 CIFAR10_DVS_ARCHIVE_MD5 = "ce3a4a0682dc0943703bd8f749a7701c"
 CIFAR10_DVS_CLASS_ARCHIVES = [
@@ -223,7 +225,9 @@ class CIFAR10DVS(Dataset):
         # Cache settings
         self.use_cache = use_cache and representation == "spike_tensor"
         self.denoise_filter_time_us = denoise_filter_time_us
-        self.cache_dir = Path(data_path).parent / "CIFAR10-DVS-cache" if self.use_cache else None
+        # Sibling of the CIFAR10-DVS dataset folder, matching where
+        # cifar10_dvs_preprocess.create_cache_directory() writes the cache.
+        self.cache_dir = Path(data_path) / "CIFAR10-DVS-cache" if self.use_cache else None
         self.cache_config_tag = self._build_cache_config_tag()
         # This is the empirically better CIFAR10-DVS orientation for both
         # visualization and model training.
@@ -459,8 +463,10 @@ class CIFAR10DVS(Dataset):
             # No cache: standard on-the-fly processing
             events = self._read_events(file_path)
             
-            if self.event_filter is not None:
-                events = self.event_filter(events, sensor_size=CIFAR10_DVS_SENSOR_SIZE)
+            # Same filter as the cache-miss path above, so a sample is denoised
+            # identically whether or not the cache is in use.
+            if self.denoiser is not None:
+                events = self.denoiser(events, sensor_size=CIFAR10_DVS_SENSOR_SIZE)
             if self.event_transform is not None and self.tensor_transform is None:
                 events = self.event_transform(events)
 
