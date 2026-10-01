@@ -15,7 +15,14 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 
 from data.datasets.ncars import NCars
-from data.transforms import ActiveSpatialCrop, Denoise, EventTransformCompose, RandomFlipLR, SpatialJitter
+from data.transforms import (
+    ActiveSpatialCrop,
+    Denoise,
+    EventTransformCompose,
+    RandomFlipLR,
+    SpatialJitter,
+    build_binary_augmentation,
+)
 from data.utils import create_output_dirs, seed_worker
 from models.logictreenet import LogicTreeNet
 
@@ -88,6 +95,14 @@ def build_parser():
     )
     parser.add_argument("--tau_gs", type=float, default=20.0,
                         help="GroupSum temperature: each class score is divided by it.")
+    parser.add_argument("--affine_degrees", type=float, default=0.0,
+                        help="Train-time random rotation range in degrees (0 = off).")
+    parser.add_argument("--affine_translate", type=float, default=0.0,
+                        help="Train-time random shift as a fraction of width and height (0 = off).")
+    parser.add_argument("--affine_scale", type=float, default=0.0,
+                        help="Train-time random zoom: scale drawn from [1 - s, 1 + s] (0 = off).")
+    parser.add_argument("--erase_p", type=float, default=0.0,
+                        help="Probability of erasing a random rectangle of each training sample (0 = off).")
     return parser
 
 
@@ -120,6 +135,10 @@ def build_run_config(args):
         "use_denoise": args.use_denoise,
         "denoise_filter_time_us": args.denoise_filter_time_us,
         "use_cache": args.use_cache,
+        "affine_degrees": args.affine_degrees,
+        "affine_translate": args.affine_translate,
+        "affine_scale": args.affine_scale,
+        "erase_p": args.erase_p,
         "tau_gs": args.tau_gs,
         "lr_tau_gs": 0,
         "tau_noise": 0,
@@ -190,7 +209,7 @@ def build_datasets(config, data_path):
         "train": NCars(
             os.path.join(dataset_root, "train"),
             event_transform=train_event_transform,
-            **dataset_kwargs,
+            **{**dataset_kwargs, "transform": build_binary_augmentation(config.affine_degrees, config.affine_translate, config.affine_scale, config.erase_p)},
         ),
         "val": NCars(
             os.path.join(dataset_root, "val"),

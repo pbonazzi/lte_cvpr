@@ -22,7 +22,7 @@ from data.datasets.cifar10_dvs import (
     build_cifar10_dvs_splits,
     download_cifar10_dvs,
 )
-from data.transforms import Denoise, EventTransformCompose, RandomFlipLR, SpatialJitter
+from data.transforms import Denoise, EventTransformCompose, RandomFlipLR, SpatialJitter, build_binary_augmentation
 from data.utils import seed_worker, create_output_dirs
 
 CONV_LOGIC_EVAL_BATCH_MULTIPLE = 16
@@ -241,6 +241,14 @@ def main():
     )
     parser.add_argument("--tau_gs", type=float, default=20.0,
                         help="GroupSum temperature: each class score is divided by it.")
+    parser.add_argument("--affine_degrees", type=float, default=0.0,
+                        help="Train-time random rotation range in degrees (0 = off).")
+    parser.add_argument("--affine_translate", type=float, default=0.0,
+                        help="Train-time random shift as a fraction of width and height (0 = off).")
+    parser.add_argument("--affine_scale", type=float, default=0.0,
+                        help="Train-time random zoom: scale drawn from [1 - s, 1 + s] (0 = off).")
+    parser.add_argument("--erase_p", type=float, default=0.0,
+                        help="Probability of erasing a random rectangle of each training sample (0 = off).")
     args = parser.parse_args()
 
     load_dotenv()
@@ -291,6 +299,10 @@ def main():
         denoise_filter_time_us=args.denoise_filter_time_us,
         num_workers=DEFAULT_NUM_WORKERS,
         weights_init_mode=args.weights_init_mode,
+        affine_degrees=args.affine_degrees,
+        affine_translate=args.affine_translate,
+        affine_scale=args.affine_scale,
+        erase_p=args.erase_p,
     )
     
     config = {**base_config, **model_config}
@@ -347,6 +359,7 @@ def main():
         train_dataset = CIFAR10DVS(
             indices=split_indices["train"],
             event_transform=build_train_event_transform(config),
+            transform=build_binary_augmentation(config.affine_degrees, config.affine_translate, config.affine_scale, config.erase_p),
             **dataset_kwargs,
         )
         val_dataset = CIFAR10DVS(indices=split_indices["val"], event_transform=None, **dataset_kwargs)
