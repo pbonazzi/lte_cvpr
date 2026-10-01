@@ -49,7 +49,7 @@ def build_parser():
         "--lr_min",
         type=float,
         default=None,
-        help="Minimum learning rate for cosine scheduler; defaults to 1% of lr_model when omitted.",
+        help="Minimum learning rate for cosine scheduler; defaults to 1%% of lr_model when omitted.",
     )
     parser.add_argument(
         "--input_size",

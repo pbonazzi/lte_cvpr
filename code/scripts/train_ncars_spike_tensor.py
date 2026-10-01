@@ -57,7 +57,7 @@ def build_parser():
         "--lr_min",
         type=float,
         default=None,
-        help="Minimum learning rate for cosine scheduler; defaults to 1% of lr_model when omitted.",
+        help="Minimum learning rate for cosine scheduler; defaults to 1%% of lr_model when omitted.",
     )
     parser.add_argument("--input_size", type=int, default=32, help="Input size for the model (must be divisible by 16)")
     parser.add_argument("--spatial_jitter_max_shift", type=int, default=1)
