@@ -255,6 +255,8 @@ def main():
                         help="Label smoothing of the cross-entropy loss (0 = off).")
     parser.add_argument("--lr_model", type=float, default=0.02,
                         help="Learning rate of the gate weights.")
+    parser.add_argument("--seed", type=int, default=15,
+                        help="Seed for initialisation, data order and augmentation; the data split stays fixed.")
     args = parser.parse_args()
 
     load_dotenv()
@@ -262,7 +264,7 @@ def main():
         os.environ["DIFFLOGIC_DEBUG_SHAPES"] = "1"
     wandb.login()
 
-    SEED = 15
+    SEED = args.seed
     OUTPUT_PATH = Path(os.getenv("OUTPUT_PATH", "./outputs"))
     DATA_PATH = Path(os.getenv("DATA_PATH", "./data"))
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -351,7 +353,7 @@ def main():
         else:
             event_filter = Denoise(filter_time=config.denoise_filter_time_us)
         
-        split_indices = build_cifar10_dvs_splits(DATA_PATH, train_size=config.train_size, seed=SEED)
+        split_indices = build_cifar10_dvs_splits(DATA_PATH, train_size=config.train_size, seed=15)  # fixed across --seed
         dataset_kwargs = dict(
             data_path=DATA_PATH,
             representation="spike_tensor",

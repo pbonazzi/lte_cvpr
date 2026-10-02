@@ -109,6 +109,8 @@ def build_parser():
                         help="Label smoothing of the cross-entropy loss (0 = off).")
     parser.add_argument("--lr_model", type=float, default=0.015,
                         help="Learning rate of the gate weights.")
+    parser.add_argument("--seed", type=int, default=15,
+                        help="Seed for initialisation, data order and augmentation; the data split stays fixed.")
     return parser
 
 
@@ -131,7 +133,7 @@ def build_run_config(args):
         "representation": "spike_tensor",
         "out_classes": 2,
         "model_scale": args.model_scale,
-        "seed": SEED,
+        "seed": args.seed,
         "input_size": args.input_size,
         "num_time_bins": args.num_time_bins,
         "binning_strategy": args.binning_strategy,
@@ -339,7 +341,7 @@ def main():
     print(f"data path = {data_path}")
 
     run_config = build_run_config(args)
-    generator = seed_everything(SEED)
+    generator = seed_everything(args.seed)
 
     with wandb.init(project=os.getenv("WANDB_PROJECT", PROJECT_NAME), config=run_config, mode=args.wandb_mode, name=args.run_name) as run:
         config = wandb.config
