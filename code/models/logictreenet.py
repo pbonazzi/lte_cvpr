@@ -51,6 +51,8 @@ class LogicTreeNet(nn.Module):
         assert model_scale in ['s', 'm', 'b', 'l', 'g']
         assert grouping_mode in {"balanced", "legacy_padded"}, grouping_mode
         assert weights_init_mode in {"residual", "gaussian"}, weights_init_mode
+        if tau_noise < 0:
+            raise ValueError(f"tau_noise must be 0 (off) or positive, got {tau_noise}")
         scale = {'s':32, 'm':256, 'b':512, 'l':1024, 'g':2560}
         k = scale[model_scale]
 

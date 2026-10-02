@@ -249,6 +249,12 @@ def main():
                         help="Train-time random zoom: scale drawn from [1 - s, 1 + s] (0 = off).")
     parser.add_argument("--erase_p", type=float, default=0.0,
                         help="Probability of erasing a random rectangle of each training sample (0 = off).")
+    parser.add_argument("--tau_noise", type=float, default=0.0,
+                        help="Gumbel noise scale for sampling hard gates during training (0 = off: softmax gates).")
+    parser.add_argument("--label_smoothing", type=float, default=0.0,
+                        help="Label smoothing of the cross-entropy loss (0 = off).")
+    parser.add_argument("--lr_model", type=float, default=0.02,
+                        help="Learning rate of the gate weights.")
     args = parser.parse_args()
 
     load_dotenv()
@@ -269,10 +275,10 @@ def main():
         lr_tau_gs = 0,
         
         # gumble noise
-        tau_noise= 0,
+        tau_noise= args.tau_noise,
         
         # generic configs
-        lr_model = 0.02,
+        lr_model = args.lr_model,
         scheduler=args.scheduler,
         lr_min=args.lr_min,
         
@@ -303,6 +309,7 @@ def main():
         affine_translate=args.affine_translate,
         affine_scale=args.affine_scale,
         erase_p=args.erase_p,
+        label_smoothing=args.label_smoothing,
     )
     
     config = {**base_config, **model_config}
@@ -335,7 +342,7 @@ def main():
             input_size=config.target_size,
             weights_init_mode=config.weights_init_mode,
         )
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
         download_cifar10_dvs(DATA_PATH)
 
         # Only create denoiser if not using cache (since denoise is done during cache generation)

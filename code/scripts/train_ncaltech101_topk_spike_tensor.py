@@ -147,6 +147,12 @@ def build_parser(default_binning_strategy="duration"):
     )
     parser.add_argument("--tau_gs", type=float, default=20.0,
                         help="GroupSum temperature: each class score is divided by it.")
+    parser.add_argument("--tau_noise", type=float, default=0.0,
+                        help="Gumbel noise scale for sampling hard gates during training (0 = off: softmax gates).")
+    parser.add_argument("--label_smoothing", type=float, default=0.0,
+                        help="Label smoothing of the cross-entropy loss (0 = off).")
+    parser.add_argument("--lr_model", type=float, default=0.02,
+                        help="Learning rate of the gate weights.")
     return parser
 
 
@@ -191,8 +197,9 @@ def build_run_config(args):
         "use_cache": args.use_cache,
         "tau_gs": args.tau_gs,
         "lr_tau_gs": 0,
-        "tau_noise": 0,
-        "lr_model": 0.02,
+        "tau_noise": args.tau_noise,
+        "label_smoothing": args.label_smoothing,
+        "lr_model": args.lr_model,
         "scheduler": args.scheduler,
         "lr_min": args.lr_min,
         "weight_decay": 0.002,
@@ -586,7 +593,10 @@ def main(default_binning_strategy="duration"):
         train_loader = build_train_loader(datasets["train"], config, generator)
         val_loader = DataLoader(datasets["val"], shuffle=False, **loader_kwargs)
         test_loader = DataLoader(datasets["test"], shuffle=False, **loader_kwargs)
-        criterion = nn.CrossEntropyLoss(weight=class_weights if config.use_class_weights else None)
+        criterion = nn.CrossEntropyLoss(
+            weight=class_weights if config.use_class_weights else None,
+            label_smoothing=config.label_smoothing,
+        )
         optimizer = build_optimizer(model, config)
         scheduler = build_scheduler(optimizer, config)
 

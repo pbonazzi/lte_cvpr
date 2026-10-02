@@ -103,6 +103,12 @@ def build_parser():
                         help="Train-time random zoom: scale drawn from [1 - s, 1 + s] (0 = off).")
     parser.add_argument("--erase_p", type=float, default=0.0,
                         help="Probability of erasing a random rectangle of each training sample (0 = off).")
+    parser.add_argument("--tau_noise", type=float, default=0.0,
+                        help="Gumbel noise scale for sampling hard gates during training (0 = off: softmax gates).")
+    parser.add_argument("--label_smoothing", type=float, default=0.0,
+                        help="Label smoothing of the cross-entropy loss (0 = off).")
+    parser.add_argument("--lr_model", type=float, default=0.015,
+                        help="Learning rate of the gate weights.")
     return parser
 
 
@@ -141,8 +147,9 @@ def build_run_config(args):
         "erase_p": args.erase_p,
         "tau_gs": args.tau_gs,
         "lr_tau_gs": 0,
-        "tau_noise": 0,
-        "lr_model": 0.015,
+        "tau_noise": args.tau_noise,
+        "label_smoothing": args.label_smoothing,
+        "lr_model": args.lr_model,
         "scheduler": args.scheduler,
         "lr_min": 0.00015 if args.lr_min is None else args.lr_min,
         "weight_decay": 0.005,
@@ -342,7 +349,7 @@ def main():
             json.dump(dict(config), config_file, indent=4)
 
         model = build_model(config).to(device)
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
         datasets = build_datasets(config, data_path)
         train_loader_kwargs = build_loader_kwargs(config, generator, config.train_batch_size)
         eval_loader_kwargs = build_loader_kwargs(config, generator, config.eval_batch_size)
