@@ -17,7 +17,7 @@ from tqdm import tqdm
 from data.datasets.nmnist import NMNIST
 from data.transforms import DATASET_TRANSFORM, Denoise
 from data.utils import create_output_dirs, seed_worker
-from models.logictreenet import LogicTreeNet
+from models.logictreenet import LogicTreeNet, harden_gates
 
 PROJECT_NAME = "Nmnist"
 SEED = 15
@@ -89,6 +89,9 @@ def build_parser():
                         help="Label smoothing of the cross-entropy loss (0 = off).")
     parser.add_argument("--lr_model", type=float, default=0.02,
                         help="Learning rate of the gate weights.")
+    parser.add_argument("--hard_gate_epochs", type=int, default=0,
+                        help="Train the last N epochs with hard gates (argmax forward, softmax gradient), "
+                             "as used at test time (0 = off).")
     parser.add_argument("--seed", type=int, default=15,
                         help="Seed for initialisation, data order and augmentation; the data split stays fixed.")
     return parser
@@ -118,6 +121,7 @@ def build_run_config(args):
         "tau_gs": args.tau_gs,
         "lr_tau_gs": 0,
         "tau_noise": args.tau_noise,
+        "hard_gate_epochs": args.hard_gate_epochs,
         "label_smoothing": args.label_smoothing,
         "lr_model": args.lr_model,
         "scheduler": args.scheduler,
@@ -356,6 +360,8 @@ def main():
 
         progress = tqdm(range(config.epochs), desc="training epochs")
         for epoch in progress:
+            if epoch >= config.epochs - config.hard_gate_epochs:
+                harden_gates(model)
             train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion, device)
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
 

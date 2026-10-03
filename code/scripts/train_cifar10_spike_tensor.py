@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn  
 
-from models.logictreenet import LogicTreeNet
+from models.logictreenet import LogicTreeNet, harden_gates
 from data.datasets.cifar10_dvs import (
     CIFAR10DVS,
     CIFAR10_DVS_CLASS_NAMES,
@@ -255,6 +255,9 @@ def main():
                         help="Label smoothing of the cross-entropy loss (0 = off).")
     parser.add_argument("--lr_model", type=float, default=0.02,
                         help="Learning rate of the gate weights.")
+    parser.add_argument("--hard_gate_epochs", type=int, default=0,
+                        help="Train the last N epochs with hard gates (argmax forward, softmax gradient), "
+                             "as used at test time (0 = off).")
     parser.add_argument("--seed", type=int, default=15,
                         help="Seed for initialisation, data order and augmentation; the data split stays fixed.")
     args = parser.parse_args()
@@ -278,6 +281,7 @@ def main():
         
         # gumble noise
         tau_noise= args.tau_noise,
+        hard_gate_epochs=args.hard_gate_epochs,
         
         # generic configs
         lr_model = args.lr_model,
@@ -425,6 +429,8 @@ def main():
         best_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         pbar = tqdm(range(config.epochs), desc="training epochs")
         for epoch in pbar: 
+            if epoch >= config.epochs - config.hard_gate_epochs:
+                harden_gates(model)
             train_metrics = train(
                 model,
                 train_loader,

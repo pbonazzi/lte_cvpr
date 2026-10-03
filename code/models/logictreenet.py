@@ -6,6 +6,18 @@ import torch.nn.functional as F
 from difflogic.logic_layer import LogicLayer, GroupSum
 from difflogic.conv_logic_layer import ConvLogicLayer
 
+
+def harden_gates(model: nn.Module):
+    """Train from now on with hard gates, straight-through.
+
+    The forward pass uses each gate's argmax, exactly as at test time, while the
+    gradient flows through the softmax. This reuses the straight-through Gumbel
+    path with its noise switched off (the noise is divided by tau_noise).
+    """
+    for m in model.modules():
+        if hasattr(m, "use_gumbel"):
+            m.use_gumbel, m.tau_noise = True, float("inf")
+
 class ConvLogicBlock(nn.Module):
     """
     """
