@@ -33,7 +33,8 @@ class CandidateWiring(nn.Module):
             return x[:, self.candidates.gather(1, pick).squeeze(1)]
         p = F.softmax(self.logits, dim=-1)
         w = torch.zeros_like(p).scatter_(1, pick, 1.0) - p.detach() + p
-        return torch.einsum("bnk,nk->bn", x[:, self.candidates], w.to(x.dtype))
+        # multiply-and-sum rather than einsum: einsum runs on cuBLAS, which deterministic mode rejects
+        return (x[:, self.candidates] * w.to(x.dtype)).sum(-1)
 
 
 def dense_logic_layer(in_dim: int, out_dim: int, connection_candidates: int = 0, **kwargs):
