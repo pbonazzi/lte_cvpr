@@ -126,9 +126,9 @@ def main():
             print(f"epoch {epoch + 1} train {right / total:.4f} val {val_acc:.4f}", flush=True)
         model.load_state_dict(best_state)
         test_acc = accuracy(model, test_loader, device)
-        run.summary.update(best_val_accuracy=best_val, best_epoch=best_epoch, test_accuracy=test_acc)
         torch.save({"state_dict": best_state, "in_ch": in_ch, "config": config}, os.path.join(out_dir, "teacher.pth"))
         json.dump(config, open(os.path.join(out_dir, "config.json"), "w"), indent=2)
+        run.summary.update({"best_val_accuracy": best_val, "best_epoch": best_epoch, "test_accuracy": test_acc})
         print(f"best val {best_val:.4f} at epoch {best_epoch + 1}, test {test_acc:.4f}, saved {out_dir}/teacher.pth")
 
 
