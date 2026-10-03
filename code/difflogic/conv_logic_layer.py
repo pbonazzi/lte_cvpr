@@ -159,7 +159,7 @@ class ConvLogicLayer(torch.nn.Module):
             b = x[:, ((c_m[2*i+1]*rf) + c_h[2*i+1])*rf + c_w[2*i+1]]
             if train: 
                 if use_gumbel:
-                    w = gumbel_softmax(weights[i].unsqueeze(0), tau_noise=tau_noise).squeeze(0)
+                    w = gumbel_softmax(weights[i].unsqueeze(0), tau_noise=tau_noise, hard=True).squeeze(0)
                 else:
                     w = F.softmax(weights[i], dim=-1)
                 output[:, i] = bin_op_s(a, b, w)          
@@ -178,13 +178,13 @@ class ConvLogicLayer(torch.nn.Module):
                 b = input[:, 2*i+1]
                 if train: 
                     if use_gumbel:
-                        w = gumbel_softmax(weights[consumed].unsqueeze(0), tau_noise=tau_noise).squeeze(0)
+                        w = gumbel_softmax(weights[consumed].unsqueeze(0), tau_noise=tau_noise, hard=True).squeeze(0)
                     else:
                         w = F.softmax(weights[consumed], dim=-1)
                     output[:, i] = bin_op_s(a, b, w)     
                 else: 
-                    hard_weights = torch.zeros_like(weights[i])
-                    hard_weights[torch.argmax(weights[i])] = 1
+                    hard_weights = torch.zeros_like(weights[consumed])
+                    hard_weights[torch.argmax(weights[consumed])] = 1
                     output[:,i] = bin_op_s(a, b, hard_weights)
                 consumed += 1
             n_inputs //= 2

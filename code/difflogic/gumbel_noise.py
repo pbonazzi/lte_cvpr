@@ -11,12 +11,16 @@ def gumbel_softmax_sample(logits, tau_noise=1.0, eps=1e-20):
     return y
 
 def gumbel_softmax(logits, tau_noise=1.0, hard=False):
+    # tau_noise = inf means no noise (harden_gates): skip sampling, and take the
+    # argmax of the raw logits, as eval does - softmax rounding can create ties
+    # that the raw logits do not have.
+    no_noise = tau_noise == float("inf")
     # Soft sample
-    y_soft = gumbel_softmax_sample(logits, tau_noise)
+    y_soft = F.softmax(logits, dim=-1) if no_noise else gumbel_softmax_sample(logits, tau_noise)
 
     if hard:
         # Step 3: discrete sample via one-hot argmax
-        index = y_soft.max(dim=-1, keepdim=True)[1]
+        index = (logits if no_noise else y_soft).argmax(dim=-1, keepdim=True)
         y_hard = torch.zeros_like(logits).scatter_(-1, index, 1.0)
         # Step 4: straight-through trick
         y = (y_hard - y_soft).detach() + y_soft
