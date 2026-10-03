@@ -283,6 +283,8 @@ def main():
     parser.add_argument("--seed", type=int, default=15,
                         help="Seed for initialisation, data order and augmentation; the data split stays fixed.")
     args = parser.parse_args()
+    if not (args.kd_T > 0 and 0 <= args.kd_alpha <= 1):
+        parser.error("--kd_T must be > 0 and --kd_alpha in [0, 1]")
 
     load_dotenv()
     if args.debug_shapes:
@@ -383,7 +385,8 @@ def main():
         if config.teacher_ckpt:
             from scripts.train_cifar10_teacher import load_teacher
             teacher, t_cfg = load_teacher(config.teacher_ckpt, DEVICE)
-            for key in ("target_size", "num_time_bins", "pool_thresholds"):   # the teacher must see the same input
+            for key in ("target_size", "num_time_bins", "pool_thresholds", "binning_strategy",
+                        "denoise_filter_time_us"):   # the teacher must see the same input
                 assert t_cfg[key] == config[key], (key, t_cfg[key], config[key])
         download_cifar10_dvs(DATA_PATH)
 

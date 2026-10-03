@@ -115,6 +115,8 @@ class LogicTreeNet(nn.Module):
         # dense_k > 0 sizes the 3 dense layers independently of the conv blocks (0 = same k);
         # gates: conv 371 * k, dense 2240 * dense_k
         kd = dense_k if dense_k > 0 else k
+        if in_ch > k:   # the first conv block's trees only read input channels 0 .. k-1
+            raise ValueError(f"in_ch ({in_ch}) must not exceed the first block's width k ({k})")
 
         if tau_gs is None:
             tau = {'s':20, 'k64':25, 'k128':30, 'm':40, 'b':280, 'l':340, 'g':450}  # k64/k128 interpolated, untuned

@@ -20,10 +20,6 @@ from data.transforms import build_binary_augmentation
 from data.utils import seed_worker
 from scripts.train_cifar10_spike_tensor import build_train_event_transform
 
-DATA_PATH = os.getenv("DATA_PATH", "data")
-OUTPUT_PATH = os.getenv("OUTPUT_PATH", "outputs")
-
-
 def build_teacher(in_ch, num_classes=10):
     """ResNet-18 with a 3x3 stride-1 stem and no max-pool, as usual for small images."""
     model = torchvision.models.resnet18(num_classes=num_classes)
@@ -71,6 +67,7 @@ def main():
     p.add_argument("--run_name", type=str, default=None)
     args = p.parse_args()
     load_dotenv()
+    DATA_PATH, OUTPUT_PATH = os.getenv("DATA_PATH", "data"), os.getenv("OUTPUT_PATH", "outputs")
 
     config = dict(vars(args), denoise_filter_time_us=50_000.0, binning_strategy="duration", train_size=0.9,
                   pool_thresholds=[int(v) for v in args.pool_thresholds.split(",") if v])
@@ -89,7 +86,7 @@ def main():
                                                               args.affine_scale, args.erase_p), **kw)
     loader = lambda ds, shuffle: DataLoader(ds, batch_size=args.batch_size, shuffle=shuffle, drop_last=shuffle,
                                             num_workers=args.num_workers, worker_init_fn=seed_worker, generator=g,
-                                            pin_memory=True, persistent_workers=True)
+                                            pin_memory=True, persistent_workers=args.num_workers > 0)
     train_loader = loader(train_ds, True)
     val_loader = loader(CIFAR10DVS(indices=splits["val"], event_transform=None, **kw), False)
     test_loader = loader(CIFAR10DVS(indices=splits["test"], event_transform=None, **kw), False)
