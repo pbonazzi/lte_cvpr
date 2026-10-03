@@ -99,6 +99,7 @@ class LogicTreeNet(nn.Module):
                  group_sum_device: Optional[str] = None,
                  weights_init_mode: str = 'residual',
                  connection_candidates: int = 0,
+                 dense_k: int = 0,
                  ) -> None:
 
         super().__init__()
@@ -111,6 +112,9 @@ class LogicTreeNet(nn.Module):
         # k64 and k128 fill the 8x gap between s and m; gate count and memory grow linearly with k
         scale = {'s':32, 'k64':64, 'k128':128, 'm':256, 'b':512, 'l':1024, 'g':2560}
         k = scale[model_scale]
+        # dense_k > 0 sizes the 3 dense layers independently of the conv blocks (0 = same k);
+        # gates: conv 371 * k, dense 2240 * dense_k
+        kd = dense_k if dense_k > 0 else k
 
         if tau_gs is None:
             tau = {'s':20, 'k64':25, 'k128':30, 'm':40, 'b':280, 'l':340, 'g':450}  # k64/k128 interpolated, untuned
@@ -130,13 +134,13 @@ class LogicTreeNet(nn.Module):
             ConvLogicBlock(4*k, 16*k, tau_noise, weights_init_mode=weights_init_mode),
             ConvLogicBlock(16*k, 32*k, tau_noise, weights_init_mode=weights_init_mode),
             nn.Flatten(start_dim=1),
-            dense_logic_layer(flattened_dim, 1280*k, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
-            dense_logic_layer(1280*k, 640*k, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
-            dense_logic_layer(640*k, 320*k, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            dense_logic_layer(flattened_dim, 1280*kd, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            dense_logic_layer(1280*kd, 640*kd, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            dense_logic_layer(640*kd, 320*kd, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
         )
 
         self.grouping_mode = grouping_mode
-        final_dim = 320 * k
+        final_dim = 320 * kd
         if self.grouping_mode == "legacy_padded":
             # Legacy mode pads to make equal-size groups before GroupSum.
             grouped_dim = ((final_dim + out_classes - 1) // out_classes) * out_classes

@@ -6,6 +6,7 @@ from typing import Sequence
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torchvision.transforms import InterpolationMode, Resize
 
@@ -211,6 +212,7 @@ class CIFAR10DVS(Dataset):
         use_cache: bool = False,
         denoise_filter_time_us: float = None,
         canonicalize_orientation: bool = False,
+        pool_thresholds: Sequence[int] | None = None,
     ):
         self.transform = transform
         self.representation = representation
@@ -221,6 +223,7 @@ class CIFAR10DVS(Dataset):
         self.binning_strategy = str(binning_strategy)
         self.sensor_height, self.sensor_width = CIFAR10_DVS_SENSOR_SIZE
         self.resize = Resize(self.target_size, interpolation=InterpolationMode.NEAREST)
+        self.pool_thresholds = tuple(int(t) for t in pool_thresholds) if pool_thresholds else ()
         
         # Cache settings
         self.use_cache = use_cache and representation == "spike_tensor"
@@ -436,6 +439,23 @@ class CIFAR10DVS(Dataset):
         # Merge temporal bins and polarity into channels: [2B, H, W].
         return torch.from_numpy(spike.reshape(2 * self.num_time_bins, self.sensor_height, self.sensor_width))
 
+    def _downsample(self, frame: torch.Tensor) -> torch.Tensor:
+        """Sensor-size binary tensor -> target size.
+
+        Default: nearest neighbour, which keeps one sensor pixel per f x f block and
+        drops every event in the others. With pool_thresholds, count the active
+        sensor pixels in each block and emit one binary map per threshold:
+        threshold 1 is a logical OR (no event dropped), higher thresholds mark
+        denser blocks. Output channels: len(pool_thresholds) x input channels.
+        """
+        if not self.pool_thresholds:
+            return self.resize(frame)
+        f = self.sensor_height // self.target_size[0]
+        if (self.sensor_height, self.sensor_width) != (f * self.target_size[0], f * self.target_size[1]):
+            raise ValueError(f"pool_thresholds needs the sensor size to be a multiple of {self.target_size}")
+        counts = (F.avg_pool2d(frame, f) * (f * f)).round()
+        return torch.cat([(counts >= t).float() for t in self.pool_thresholds], dim=0)
+
     def __getitem__(self, index):
         file_path = self.file_paths[index]
         
@@ -475,7 +495,7 @@ class CIFAR10DVS(Dataset):
             else:
                 frame = self._events_to_frame(events)
 
-        frame = self.resize(frame)
+        frame = self._downsample(frame)
         if self.canonicalize_orientation:
             frame = torch.rot90(frame, k=1, dims=(-2, -1))
         if self.tensor_transform is not None:

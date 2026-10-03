@@ -13,6 +13,7 @@ from sklearn.metrics import confusion_matrix
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn  
+import torch.nn.functional as F
 
 from models.logictreenet import LogicTreeNet, harden_gates
 from data.datasets.cifar10_dvs import (
@@ -53,9 +54,12 @@ def build_loader_kwargs(batch_size, generator, num_workers, drop_last):
     return loader_kwargs
 
 
-def train(model, train_loader, optimizer, criterion, device):
+def train(model, train_loader, optimizer, criterion, device, teacher=None, kd_alpha=0.0, kd_T=4.0):
     """
     one epoch training through the whole train dataset
+
+    With a teacher: loss = (1 - kd_alpha) * criterion + kd_alpha * kd_T^2 * KL(teacher || student),
+    both class-score vectors softened by kd_T (Hinton et al. 2015), on the same augmented batch.
     """
     model.train()
     tot_loss = 0.0
@@ -71,6 +75,12 @@ def train(model, train_loader, optimizer, criterion, device):
         optimizer.zero_grad()
         logits = model(x)
         batch_loss = criterion(logits, y)
+        if teacher is not None:
+            with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+                t_logits = teacher(x).float()
+            kd = F.kl_div(F.log_softmax(logits / kd_T, dim=1), F.log_softmax(t_logits / kd_T, dim=1),
+                          log_target=True, reduction="batchmean") * kd_T ** 2
+            batch_loss = (1 - kd_alpha) * batch_loss + kd_alpha * kd
         batch_loss.backward()
         optimizer.step()
         
@@ -255,6 +265,15 @@ def main():
                         help="Label smoothing of the cross-entropy loss (0 = off).")
     parser.add_argument("--lr_model", type=float, default=0.02,
                         help="Learning rate of the gate weights.")
+    parser.add_argument("--pool_thresholds", type=str, default="",
+                        help="Downsample sensor -> target size by counting active pixels per block, one binary "
+                             "channel per threshold, e.g. '1' (logical OR) or '1,2'; empty = nearest neighbour.")
+    parser.add_argument("--dense_k", type=int, default=0,
+                        help="Width of the 3 dense layers in units of k (0 = the scale's k); conv blocks keep the scale's k.")
+    parser.add_argument("--teacher_ckpt", type=str, default="",
+                        help="teacher.pth from scripts/train_cifar10_teacher.py for knowledge distillation (empty = off).")
+    parser.add_argument("--kd_alpha", type=float, default=0.9, help="Weight of the distillation loss.")
+    parser.add_argument("--kd_T", type=float, default=4.0, help="Distillation temperature.")
     parser.add_argument("--connection_candidates", type=int, default=0,
                         help="Learned wiring for the dense logic layers: each gate input picks one of K random "
                              "candidate inputs (straight-through); 0 = fixed random wiring.")
@@ -286,6 +305,11 @@ def main():
         tau_noise= args.tau_noise,
         hard_gate_epochs=args.hard_gate_epochs,
         connection_candidates=args.connection_candidates,
+        pool_thresholds=[int(v) for v in args.pool_thresholds.split(",") if v],
+        dense_k=args.dense_k,
+        teacher_ckpt=args.teacher_ckpt,
+        kd_alpha=args.kd_alpha if args.teacher_ckpt else 0.0,
+        kd_T=args.kd_T,
         
         # generic configs
         lr_model = args.lr_model,
@@ -344,7 +368,7 @@ def main():
         
         model = LogicTreeNet(
             config.model_scale,
-            in_ch=2 * config.num_time_bins,
+            in_ch=2 * config.num_time_bins * max(1, len(config.pool_thresholds)),
             out_classes=10,
             tau_gs=config.tau_gs,
             tau_noise=config.tau_noise,
@@ -352,8 +376,15 @@ def main():
             input_size=config.target_size,
             weights_init_mode=config.weights_init_mode,
             connection_candidates=config.connection_candidates,
+            dense_k=config.dense_k,
         )
         criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
+        teacher = None
+        if config.teacher_ckpt:
+            from scripts.train_cifar10_teacher import load_teacher
+            teacher, t_cfg = load_teacher(config.teacher_ckpt, DEVICE)
+            for key in ("target_size", "num_time_bins", "pool_thresholds"):   # the teacher must see the same input
+                assert t_cfg[key] == config[key], (key, t_cfg[key], config[key])
         download_cifar10_dvs(DATA_PATH)
 
         # Only create denoiser if not using cache (since denoise is done during cache generation)
@@ -373,6 +404,7 @@ def main():
             use_cache=args.use_cache,
             denoise_filter_time_us=config.denoise_filter_time_us,
             canonicalize_orientation=True,
+            pool_thresholds=config.pool_thresholds,
         )
         train_dataset = CIFAR10DVS(
             indices=split_indices["train"],
@@ -442,6 +474,9 @@ def main():
                 optimizer,
                 criterion,
                 DEVICE,
+                teacher=teacher,
+                kd_alpha=config.kd_alpha,
+                kd_T=config.kd_T,
             )
             train_loss.append(train_metrics["loss"])
 
