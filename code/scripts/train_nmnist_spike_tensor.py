@@ -89,6 +89,9 @@ def build_parser():
                         help="Label smoothing of the cross-entropy loss (0 = off).")
     parser.add_argument("--lr_model", type=float, default=0.02,
                         help="Learning rate of the gate weights.")
+    parser.add_argument("--connection_candidates", type=int, default=0,
+                        help="Learned wiring for the dense logic layers: each gate input picks one of K random "
+                             "candidate inputs (straight-through); 0 = fixed random wiring.")
     parser.add_argument("--hard_gate_epochs", type=int, default=0,
                         help="Train the last N epochs with hard gates (argmax forward, softmax gradient), "
                              "as used at test time (0 = off).")
@@ -122,6 +125,7 @@ def build_run_config(args):
         "lr_tau_gs": 0,
         "tau_noise": args.tau_noise,
         "hard_gate_epochs": args.hard_gate_epochs,
+        "connection_candidates": args.connection_candidates,
         "label_smoothing": args.label_smoothing,
         "lr_model": args.lr_model,
         "scheduler": args.scheduler,
@@ -157,6 +161,7 @@ def build_model(config):
         tau_noise=config.tau_noise,
         learn_tau_gs=config.lr_tau_gs > 0,
         input_size=config.input_size,
+        connection_candidates=getattr(config, "connection_candidates", 0),  # absent in older run configs
     )
 
 

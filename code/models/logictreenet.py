@@ -7,6 +7,48 @@ from difflogic.logic_layer import LogicLayer, GroupSum
 from difflogic.conv_logic_layer import ConvLogicLayer
 
 
+class CandidateWiring(nn.Module):
+    """Learned wiring for a dense logic layer (bounded candidate pool, straight-through).
+
+    Each of the layer's 2 * out_dim gate inputs picks one of k candidate inputs.
+    Candidate 0 is the usual fixed random wire (every input used about equally,
+    as in LogicLayer.get_connections), candidates 1..k-1 are further random
+    inputs. Selection logits start equal, so argmax picks candidate 0 and the
+    untrained model is exactly the fixed-wiring one. Forward always uses the
+    argmax candidate, as at test time; the gradient flows through the softmax.
+    Output: (batch, 2 * out_dim), first half the gates' A inputs, then the B inputs.
+    """
+    def __init__(self, in_dim: int, out_dim: int, k: int, device: str = "cuda"):
+        super().__init__()
+        n = 2 * out_dim
+        wire = torch.randperm(in_dim)[torch.randperm(n) % in_dim]
+        cand = torch.randint(in_dim, (n, k))
+        cand[:, 0] = wire
+        self.register_buffer("candidates", cand.to(device))
+        self.logits = nn.Parameter(torch.zeros(n, k, device=device))
+
+    def forward(self, x):
+        pick = self.logits.argmax(-1, keepdim=True)
+        if not self.training:
+            return x[:, self.candidates.gather(1, pick).squeeze(1)]
+        p = F.softmax(self.logits, dim=-1)
+        w = torch.zeros_like(p).scatter_(1, pick, 1.0) - p.detach() + p
+        return torch.einsum("bnk,nk->bn", x[:, self.candidates], w.to(x.dtype))
+
+
+def dense_logic_layer(in_dim: int, out_dim: int, connection_candidates: int = 0, **kwargs):
+    """A LogicLayer with fixed random wiring, or with learned wiring when connection_candidates > 0."""
+    if connection_candidates <= 0:
+        return LogicLayer(in_dim, out_dim, **kwargs)
+    gates = LogicLayer(2 * out_dim, out_dim, **kwargs)
+    with torch.no_grad():   # gate i reads inputs i and out_dim + i of the CandidateWiring output
+        gates.indices_0.copy_(torch.arange(out_dim))
+        gates.indices_1.copy_(torch.arange(out_dim, 2 * out_dim))
+    if gates.implementation == "cuda":
+        gates._build_reverse_adjacency()
+    return nn.Sequential(CandidateWiring(in_dim, out_dim, connection_candidates, device=gates.device), gates)
+
+
 def harden_gates(model: nn.Module):
     """Train from now on with hard gates, straight-through.
 
@@ -56,6 +98,7 @@ class LogicTreeNet(nn.Module):
                  grouping_mode: str = "balanced",
                  group_sum_device: Optional[str] = None,
                  weights_init_mode: str = 'residual',
+                 connection_candidates: int = 0,
                  ) -> None:
 
         super().__init__()
@@ -87,9 +130,9 @@ class LogicTreeNet(nn.Module):
             ConvLogicBlock(4*k, 16*k, tau_noise, weights_init_mode=weights_init_mode),
             ConvLogicBlock(16*k, 32*k, tau_noise, weights_init_mode=weights_init_mode),
             nn.Flatten(start_dim=1),
-            LogicLayer(flattened_dim, 1280*k, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
-            LogicLayer(1280*k, 640*k, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
-            LogicLayer(640*k, 320*k, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            dense_logic_layer(flattened_dim, 1280*k, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            dense_logic_layer(1280*k, 640*k, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
+            dense_logic_layer(640*k, 320*k, connection_candidates, tau_noise=tau_noise, weights_init_mode=weights_init_mode),
         )
 
         self.grouping_mode = grouping_mode
