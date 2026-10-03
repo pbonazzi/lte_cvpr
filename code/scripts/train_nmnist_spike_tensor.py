@@ -35,7 +35,7 @@ def build_parser():
         choices=("duration", "event_count"),
         help="How to assign events to temporal bins.",
     )
-    parser.add_argument("--model_scale", type=str, default="s", choices=["s", "m", "b", "l", "g"])
+    parser.add_argument("--model_scale", type=str, default="s", choices=["s", "k64", "k128", "m", "b", "l", "g"])
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--wandb_mode", type=str, default="online", choices=["online", "offline", "disabled"])
     parser.add_argument(

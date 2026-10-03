@@ -189,7 +189,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_name", type=str, default=None, help="Custom run name for wandb")
     parser.add_argument("--epochs", type=int, default=200, help="Number of training epochs")
-    parser.add_argument("--model_scale", type=str, default="s", choices=["s", "m", "b", "l", "g"], help="Model scale")
+    parser.add_argument("--model_scale", type=str, default="s", choices=["s", "k64", "k128", "m", "b", "l", "g"], help="Model scale")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--debug_shapes", action="store_true", help="Print one-time tensor shapes during the first forward pass")
     parser.add_argument(

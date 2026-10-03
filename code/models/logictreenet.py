@@ -60,16 +60,17 @@ class LogicTreeNet(nn.Module):
 
         super().__init__()
 
-        assert model_scale in ['s', 'm', 'b', 'l', 'g']
+        assert model_scale in ['s', 'k64', 'k128', 'm', 'b', 'l', 'g']
         assert grouping_mode in {"balanced", "legacy_padded"}, grouping_mode
         assert weights_init_mode in {"residual", "gaussian"}, weights_init_mode
         if tau_noise < 0:
             raise ValueError(f"tau_noise must be 0 (off) or positive, got {tau_noise}")
-        scale = {'s':32, 'm':256, 'b':512, 'l':1024, 'g':2560}
+        # k64 and k128 fill the 8x gap between s and m; gate count and memory grow linearly with k
+        scale = {'s':32, 'k64':64, 'k128':128, 'm':256, 'b':512, 'l':1024, 'g':2560}
         k = scale[model_scale]
 
         if tau_gs is None:
-            tau = {'s':20, 'm':40, 'b':280, 'l':340, 'g':450}
+            tau = {'s':20, 'k64':25, 'k128':30, 'm':40, 'b':280, 'l':340, 'g':450}  # k64/k128 interpolated, untuned
             tau_gs = tau[model_scale]
         if group_sum_device is None:
             group_sum_device = "cuda" if torch.cuda.is_available() else "cpu"
