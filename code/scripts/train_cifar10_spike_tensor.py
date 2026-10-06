@@ -270,6 +270,11 @@ def main():
                              "channel per threshold, e.g. '1' (logical OR) or '1,2'; empty = nearest neighbour.")
     parser.add_argument("--dense_k", type=int, default=0,
                         help="Width of the 3 dense layers in units of k (0 = the scale's k); conv blocks keep the scale's k.")
+    parser.add_argument("--split", type=str, default="random", choices=["random", "standard_text", "standard_numeric"],
+                        help="random: seed-15 shuffle with a validation set, best-validation epoch is tested. "
+                             "standard_*: first 90%% of each class train, last 10%% test (as in most papers), no "
+                             "validation set; the last epoch is tested, and the per-epoch test accuracy is logged "
+                             "only to report max-over-epochs, the protocol of most baselines, separately.")
     parser.add_argument("--teacher_ckpt", type=str, default="",
                         help="teacher.pth from scripts/train_cifar10_teacher.py for knowledge distillation (empty = off).")
     parser.add_argument("--kd_alpha", type=float, default=0.9, help="Weight of the distillation loss.")
@@ -309,6 +314,7 @@ def main():
         connection_candidates=args.connection_candidates,
         pool_thresholds=[int(v) for v in args.pool_thresholds.split(",") if v],
         dense_k=args.dense_k,
+        split=args.split,
         teacher_ckpt=args.teacher_ckpt,
         kd_alpha=args.kd_alpha if args.teacher_ckpt else 0.0,
         kd_T=args.kd_T,
@@ -396,7 +402,9 @@ def main():
         else:
             event_filter = Denoise(filter_time=config.denoise_filter_time_us)
         
-        split_indices = build_cifar10_dvs_splits(DATA_PATH, train_size=config.train_size, seed=15)  # fixed across --seed
+        split_indices = build_cifar10_dvs_splits(DATA_PATH, train_size=config.train_size, seed=15,  # fixed across --seed
+                                                 mode=config.split)
+        has_val = len(split_indices["val"]) > 0
         dataset_kwargs = dict(
             data_path=DATA_PATH,
             representation="spike_tensor",
@@ -415,7 +423,7 @@ def main():
             transform=build_binary_augmentation(config.affine_degrees, config.affine_translate, config.affine_scale, config.erase_p),
             **dataset_kwargs,
         )
-        val_dataset = CIFAR10DVS(indices=split_indices["val"], event_transform=None, **dataset_kwargs)
+        val_dataset = CIFAR10DVS(indices=split_indices["val"], event_transform=None, **dataset_kwargs) if has_val else None
         test_dataset = CIFAR10DVS(indices=split_indices["test"], event_transform=None, **dataset_kwargs)
 
         train_loader = DataLoader(
@@ -427,7 +435,7 @@ def main():
             val_dataset,
             shuffle=False,
             **build_loader_kwargs(config.batch_size, g, config.num_workers, False),
-        )
+        ) if has_val else None
         test_loader = DataLoader(
             test_dataset,
             shuffle=False,
@@ -483,25 +491,28 @@ def main():
             )
             train_loss.append(train_metrics["loss"])
 
+            # Without a validation set (standard split) the test set is scored every epoch only to
+            # report the baselines' max-over-epochs number separately; it selects nothing.
             val_metrics = evaluate(
                 model,
-                val_loader,
+                val_loader if has_val else test_loader,
                 criterion,
                 DEVICE,
             )
+            prefix = "val" if has_val else "test_epoch"
             val_loss.append(val_metrics["loss"])
             val_accuracy.append(val_metrics["accuracy"])
 
-            if val_metrics["accuracy"] > best_accuracy:
+            if has_val and val_metrics["accuracy"] > best_accuracy:
                 best_accuracy = val_metrics["accuracy"]
                 best_epoch = epoch
                 best_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
             wandb.log({"epoch": epoch+1, 
                        "train_loss": train_metrics["loss"],
-                       "val_loss": val_metrics["loss"],
+                       f"{prefix}_loss": val_metrics["loss"],
                        "train_accuracy": train_metrics["accuracy"],
-                       "val_accuracy": val_metrics["accuracy"],
+                       f"{prefix}_accuracy": val_metrics["accuracy"],
                        "lr_model": optimizer.param_groups[0]["lr"],
                        "tau_gs": model.group_sum.tau.detach().item(), 
                        })
@@ -516,8 +527,17 @@ def main():
         
         print("training finished")
 
-        model.load_state_dict(best_state_dict)
-        print("restored best weights from epoch {}".format(best_epoch+1))
+        if has_val:
+            model.load_state_dict(best_state_dict)
+            print("restored best weights from epoch {}".format(best_epoch+1))
+            summary = {"best_epoch": best_epoch+1,
+                       "best_val_loss": val_loss[best_epoch],
+                       "best_val_accuracy": val_accuracy[best_epoch]}
+        else:   # standard split: the last epoch is the result; max over epochs is logged apart, labelled
+            max_epoch = int(np.argmax(val_accuracy))
+            print("testing the last epoch; max per-epoch test accuracy {:.4f} at epoch {}".format(val_accuracy[max_epoch], max_epoch+1))
+            summary = {"max_test_accuracy_over_epochs": val_accuracy[max_epoch],
+                       "max_test_epoch": max_epoch+1}
 
         test_metrics = evaluate(
             model,
@@ -526,9 +546,7 @@ def main():
             DEVICE,
         )
         test_predictions = collect_predictions(model, test_loader, DEVICE)
-        wandb.log({"best_epoch": best_epoch+1, 
-                   "best_val_loss": val_loss[best_epoch],
-                   "best_val_accuracy": val_accuracy[best_epoch],
+        wandb.log({**summary,
                    "test_loss": test_metrics["loss"],
                    "test_accuracy": test_metrics["accuracy"],
                    "test_confusion_matrix_counts": build_confusion_matrix_heatmap(

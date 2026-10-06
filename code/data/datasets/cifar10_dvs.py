@@ -163,7 +163,19 @@ def build_cifar10_dvs_splits(
     train_size: float = 0.9,
     seed: int = 15,
     val_ratio_within_train: float = 0.1,
+    mode: str = "random",
 ):
+    """Per-class split of the 10 x 1000 clips.
+
+    random (default): shuffle each class with `seed`; the last (1 - train_size) is test and
+        val_ratio_within_train of the rest is validation.
+    standard_text / standard_numeric: the split most papers use (SpikingJelly's
+        split_to_train_test_set with random_split=False): no shuffle and no validation set;
+        the first train_size of each class is train, the rest test. "First" follows the file
+        names sorted as text (cifar10_airplane_0, _1, _10, _100, ...) or by their number.
+    """
+    if mode not in {"random", "standard_text", "standard_numeric"}:
+        raise ValueError(f"unknown split mode {mode!r}")
     if not 0.0 < train_size < 1.0:
         raise ValueError(f"train_size must be in (0, 1), got {train_size}")
     if not 0.0 <= val_ratio_within_train < 1.0:
@@ -171,7 +183,22 @@ def build_cifar10_dvs_splits(
             f"val_ratio_within_train must be in [0, 1), got {val_ratio_within_train}"
         )
 
-    _, labels = load_cifar10_dvs_metadata(data_path)
+    file_paths, labels = load_cifar10_dvs_metadata(data_path)
+    if mode != "random":
+        number = lambda i: int(Path(file_paths[i]).stem.rsplit("_", 1)[1])
+        train_indices, test_indices = [], []
+        for class_idx in range(len(CIFAR10_DVS_CLASS_NAMES)):
+            class_indices = np.flatnonzero(labels == class_idx).tolist()   # already in text-sorted file order
+            if mode == "standard_numeric":
+                class_indices.sort(key=number)
+            cut = int(len(class_indices) * train_size)
+            train_indices += class_indices[:cut]
+            test_indices += class_indices[cut:]
+        return {
+            "train": np.asarray(train_indices, dtype=np.int64),
+            "val": np.asarray([], dtype=np.int64),
+            "test": np.asarray(test_indices, dtype=np.int64),
+        }
     rng = np.random.default_rng(seed)
 
     train_indices = []
